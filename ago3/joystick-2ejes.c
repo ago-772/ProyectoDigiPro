@@ -42,14 +42,15 @@ void ADC_IRQHandler(void) {
     bufferX[indice] = valorX;
     bufferY[indice] = valorY;
     indice++;
-    if(indice >= N_MUESTRAS) indice = 0;
+if (indice >= N_MUESTRAS) {
+    indice = 0;
 
-    // Promedios
     uint32_t sumaX = 0, sumaY = 0;
     for(int i = 0; i < N_MUESTRAS; i++){
         sumaX += bufferX[i];
         sumaY += bufferY[i];
     }
+
     uint16_t promedioX = sumaX / N_MUESTRAS;
     uint16_t promedioY = sumaY / N_MUESTRAS;
 
@@ -57,7 +58,7 @@ void ADC_IRQHandler(void) {
     pulsoX = 1000 + ((uint32_t)promedioX * 1000 / 4095);
     pulsoY = 1000 + ((uint32_t)promedioY * 1000 / 4095);
 
-    // Actualiza PWM de ambos servos
+    // Actualiza PWM
     TIM_UpdateMatchValue(LPC_TIM2, 1, pulsoX);
     TIM_UpdateMatchValue(LPC_TIM2, 2, pulsoY);
 
