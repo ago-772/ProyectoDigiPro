@@ -18,13 +18,13 @@
 
 volatile uint16_t valorADC = 0;
 
-// --- NUEVO: variables para filtro por promedio ---
+
 #define N_MUESTRAS 20
 volatile uint16_t bufferADC[N_MUESTRAS];
 volatile uint8_t indiceADC = 0;
 volatile uint32_t pulso = 1500;   // valor inicial seguro
 
-// ===================== INTERRUPCIÓN ADC =====================
+//  INTERRUPCIÓN ADC 
 void ADC_IRQHandler(void) {
     // Espera fin de conversión
     while(!ADC_ChannelGetStatus(LPC_ADC, ADC_CH, ADC_DATA_DONE));
@@ -64,8 +64,7 @@ void ADC_IRQHandler(void) {
     }
 }
 
-// ===================== INTERRUPCIÓN TIMER0 =====================
-// --- NUEVO: Timer0 dispara conversiones ADC cada 10 ms ---
+// INTERRUPCIÓN TIMER0
 void TIMER0_IRQHandler(void) {
     if (TIM_GetIntStatus(LPC_TIM0, TIM_MR0_INT)) {
         TIM_ClearIntPending(LPC_TIM0, TIM_MR0_INT);
@@ -73,7 +72,7 @@ void TIMER0_IRQHandler(void) {
     }
 }
 
-// ===================== INTERRUPCIÓN TIMER2 =====================
+// INTERRUPCIÓN TIMER2 
 void TIMER2_IRQHandler(void)
 {
     //interrupion por MATCH0
@@ -89,7 +88,7 @@ void TIMER2_IRQHandler(void)
     }
 }
 
-// ===================== CONFIGURACIÓN GPIO =====================
+//  CONFIGURACIÓN GPIO
 void ConfGPIO(void)
 {
 	//configuracion pin P0.9
@@ -108,7 +107,7 @@ void ConfGPIO(void)
     GPIO_SetDir(0, (1<<SERVO_PIN), 1);					//configurar como salida
 }
 
-// ===================== CONFIGURACIÓN TIMER2 =====================
+//  CONFIGURACIÓN TIMER2 
 void ConfTIMER2(void)
 {
     TIM_TIMERCFG_Type timerCfg;
@@ -141,8 +140,7 @@ void ConfTIMER2(void)
     TIM_Cmd(LPC_TIM2, ENABLE);
 }
 
-// ===================== CONFIGURACIÓN TIMER0 =====================
-// --- NUEVO: genera interrupción cada 10 ms para disparar el ADC ---
+//  CONFIGURACIÓN TIMER0 
 void ConfTIMER0(void)
 {
     TIM_TIMERCFG_Type timerCfg;
@@ -164,7 +162,7 @@ void ConfTIMER0(void)
     TIM_Cmd(LPC_TIM0, ENABLE);
 }
 
-// ===================== CONFIGURACIÓN ADC =====================
+//  CONFIGURACIÓN ADC 
 void ConfADC(void)
 {
     // Pin P1.30 -> AD0.4
@@ -183,7 +181,6 @@ void ConfADC(void)
     NVIC_EnableIRQ(ADC_IRQn);
 }
 
-// ===================== MAIN =====================
 int main(void)
 {
     ConfGPIO();
