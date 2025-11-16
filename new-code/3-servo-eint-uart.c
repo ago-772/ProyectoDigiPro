@@ -120,7 +120,6 @@ void ConfGPIO(void)
     GPIO_SetDir(0, (1<<SERVO_PIN) | (1<<SERVO_PIN2) | (1<<SERVO_PIN3), 1);
 }
 
-
 // Configuración ADC
 void ConfADC(void)
 {
@@ -358,13 +357,8 @@ void TIMER0_IRQHandler(void)
                 recordedPulses[recordIndex][2] = pulso3;
                 recordIndex++;
             }
-            else
-            {
-                // Grabación completa, pasa a reproducción
-                systemMode = 2;
-                playbackIndex = 0;
-                NVIC_DisableIRQ(ADC_IRQn); // Deshabilita ADC
-            }
+            // BUFFER CIRCULAR
+            recordIndex = (recordIndex + 1) % NUM_MUESTRAS;
         }
         else if (systemMode == 2) // Modo Reproducción
         {
@@ -428,6 +422,5 @@ int main(void)
 
     while (1)
     {
-        // El trabajo se hace en las interrupciones
     }
 }
