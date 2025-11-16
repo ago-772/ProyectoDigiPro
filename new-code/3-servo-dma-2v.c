@@ -315,8 +315,6 @@ void TIMER2_IRQHandler(void)
     }
 }
 
-// --- NUEVAS FUNCIONES ---
-
 // Timer0 para muestreo/grabación
 void ConfTIMER0(void)
 {
@@ -357,7 +355,7 @@ void TIMER0_IRQHandler(void)
     }
 }
 
-// Timer1 para pacer/trigger del DMA
+// Timer1 para trigger del DMA
 void ConfTIMER1(void)
 {
     TIM_TIMERCFG_Type timerCfg;
@@ -401,7 +399,6 @@ void ConfDMA(void)
             | 0;                                            // NO incrementa destino
     }
 
-    // Inicializar el controlador DMA
     GPDMA_Init();
 
     // Configuración del canal DMA0
@@ -412,12 +409,10 @@ void ConfDMA(void)
     dmaCfg.SrcMemAddr    = (uint32_t)&memoriaPulsos[0][0];
     dmaCfg.DstMemAddr    = (uint32_t)&LPC_TIM2->MR1;
     dmaCfg.SrcConn       = 0;
-    dmaCfg.DstConn       = GPDMA_CONN_MAT0_0;          // Trigger
+    dmaCfg.DstConn       = GPDMA_CONN_MAT0_0;         
     dmaCfg.DMALLI        = (uint32_t)&lli_playback[0];
 
     GPDMA_Setup(&dmaCfg);
-
-    // OJO: NO habilitar el canal acá (lo hace EINT2)
 }
 
 
@@ -461,7 +456,7 @@ void EINT0_IRQHandler(void)
     else
     {
         // Entrando a MODO ADC
-        TIM_Cmd(LPC_TIM1, DISABLE);     // Deshabilita Timer1 (pacer)
+        TIM_Cmd(LPC_TIM1, DISABLE);     //deshabilita timer1
         GPDMA_ChannelCmd(0, DISABLE);   // Deshabilitar Canal 0 DMA
 
         NVIC_EnableIRQ(ADC_IRQn);       // Habilita interrupción del ADC
@@ -479,8 +474,7 @@ int main(void)
     ConfTIMER2();
     configGPIO_UART();
     configUART();
-
-    // Configurar nuevos periféricos
+    
     ConfTIMER0(); // Inicia la grabación
     ConfTIMER1(); // Configura el pacer/trigger del DMA
     ConfDMA();    // Configura el DMA y la LLI
@@ -488,6 +482,7 @@ int main(void)
 
     while (1)
     {
-        // Todo se maneja por interrupciones y DMA
+       
     }
 }
+
