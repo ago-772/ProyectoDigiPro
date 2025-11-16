@@ -1,15 +1,4 @@
 /*
- * Proyecto: Control de 3 servomotores con 3 potenciómetros - LPC1769
- *
- * Descripción:
- * Control de tres servos mediante tres potenciómetros usando ADC en modo burst
- * y generación de PWM por software con el Timer2.
- *
- * Añadido:
- * - Grabación de 10 segundos de movimientos usando Timer0.
- * - Reproducción en bucle de los movimientos grabados usando GPDMA (LLI).
- * - Cambio de modo (Manual, Grabación, Reproducción) mediante EINT0 (P2.10).
- *
  * Conexiones:
  * - Potenciómetro 1 -> P1.30 (AD0.4)
  * - Potenciómetro 2 -> P1.31 (AD0.5)
@@ -28,7 +17,7 @@
 #include "lpc17xx_nvic.h"
 #include "lpc17xx_uart.h"
 #include "lpc17xx_exti.h"
-#include "lpc17xx_gpdma.h" // <-- Añadido para DMA
+#include "lpc17xx_gpdma.h"
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -45,8 +34,7 @@
 // --- Definiciones para Grabación ---
 #define PWM_PERIODO_US  20000   // 20ms
 #define TIEMPO_GRAB_S   10      // 10 segundos
-#define NUM_MUESTRAS    (TIEMPO_GRAB_S * (1000000 / PWM_PERIODO_US)) // 10 * 50 = 500
-
+#define NUM_MUESTRAS    1000
 // Variables globales
 volatile uint16_t valorADC1 = 0;
 volatile uint16_t valorADC2 = 0;
@@ -60,15 +48,16 @@ volatile uint32_t counter = 0;
 
 // --- Variables para Grabación/Reproducción ---
 volatile uint8_t systemMode = 0; // 0: Manual, 1: Grabando, 2: Reproduciendo
-// ALINEACIÓN IMPORTANTE: El array de pulsos debe estar alineado para DMA
+
+//volatile uint32_t recordedPulses[NUM_MUESTRAS][3];
 volatile uint32_t recordedPulses[NUM_MUESTRAS][3] __attribute__ ((aligned(4)));
 volatile uint32_t recordIndex = 0;
 
 // --- Variables DMA ---
-// Array para la Lista Enlazada (LLI) del DMA
+// volatile GPDMA_LLI_Type dmaLLI[NUM_MUESTRAS];
 volatile GPDMA_LLI_Type dmaLLI[NUM_MUESTRAS] __attribute__ ((aligned(16)));
 
-// Config UART
+//++++++++++++++++++++++++ Config UART ++++++++++++++++++++++++
 void configGPIO_UART(void) {
     PINSEL_CFG_Type psel_conf;
 
@@ -87,6 +76,7 @@ void configGPIO_UART(void) {
     PINSEL_ConfigPin(&psel_conf);
 }
 
+//++++++++++++++++++++++++ Config UART ++++++++++++++++++++++++
 void configUART(void) {
     UART_CFG_Type uart_cfg;
     UART_FIFO_CFG_Type fifo_cfg;
@@ -100,7 +90,7 @@ void configUART(void) {
     UART_TxCmd((LPC_UART_TypeDef *) LPC_UART0, ENABLE);
 }
 
-// Configuración GPIO
+//++++++++++++++++++++++++Configuración GPIO++++++++++++++++++++++++
 void ConfGPIO(void)
 {
     PINSEL_CFG_Type PinCfg;
@@ -125,7 +115,7 @@ void ConfGPIO(void)
     GPIO_SetDir(0, (1<<SERVO_PIN) | (1<<SERVO_PIN2) | (1<<SERVO_PIN3), 1);
 }
 
-// Configuración ADC
+//++++++++++++++++++++++++Configuración ADC++++++++++++++++++++++++
 void ConfADC(void)
 {
     PINSEL_CFG_Type PinCfg;
@@ -163,7 +153,7 @@ void ConfADC(void)
     // NVIC_EnableIRQ(ADC_IRQn); // Se habilita/deshabilita desde EINT
 }
 
-// Interrupción ADC
+//++++++++++++++++++++++++Interrupción ADC++++++++++++++++++++++++
 void ADC_IRQHandler(void)
 {
     // Solo actualiza 'pulso' si el DMA no está activo (Modo Manual o Grabando)
@@ -218,7 +208,7 @@ void ADC_IRQHandler(void)
     }
 }
 
-// Timer2 PWM software
+//++++++++++++++++++++++++ Timer2 PWM software ++++++++++++++++++++++++
 void ConfTIMER2(void)
 {
     TIM_TIMERCFG_Type timerCfg;
@@ -307,6 +297,11 @@ void ConfEINT(void)
 // --- Configuración DMA para Reproducción ---
 void ConfDMA_Playback(void)
 {
+/*
+recordedPulses[i][0] → servo1
+recordedPulses[i][1] → servo2
+recordedPulses[i][2] → servo3
+*/
     GPDMA_Channel_CFG_Type dmaCfg;
 
     GPDMA_Init();
@@ -324,13 +319,15 @@ void ConfDMA_Playback(void)
         dmaLLI[i].NextLLI = (uint32_t)&dmaLLI[i + 1];
 
         // Configuración de control del DMA para esta transferencia
-        dmaLLI[i].Control = GPDMA_DMACCxControl_TransferSize(3)    | // 3 items (MR1, MR2, MR3)
-                          GPDMA_DMACCxControl_SWidth(GPDMA_WIDTH_WORD) | // 32-bit
-                          GPDMA_DMACCxControl_DWidth(GPDMA_WIDTH_WORD) | // 32-bit
-                          GPDMA_DMACCxControl_SBSize(GPDMA_BSIZE_1)  | // Burst 1
-                          GPDMA_DMACCxControl_DBSize(GPDMA_BSIZE_1)  | // Burst 1
-                          GPDMA_DMACCxControl_SI | // Incremento de Fuente
-                          GPDMA_DMACCxControl_DI;  // Incremento de Destino
+        dmaLLI[i].Control =
+            (3 << 0)     |   // TransferSize = 3 words (MR1, MR2, MR3)
+            (2 << 18)    |   // Source width = 32 bits
+            (2 << 21)    |   // Dest   width = 32 bits
+            (0 << 12)    |   // Source burst = 1
+            (0 << 15)    |   // Dest   burst = 1
+            (1 << 26)    |   // SI = Source increment
+            (1 << 27);       // DI = Dest increment
+
     }
 
     // 2. Hacer que la LLI sea circular (la última apunta a la primera)
@@ -356,6 +353,9 @@ void ConfDMA_Playback(void)
 
 // Interrupción Timer2
 void TIMER2_IRQHandler(void)
+//genera el PWM
+//Cada 1 segundo: manda mensaje por UART. - pulsos
+
 {
     // MATCH0 -> reinicia ciclo PWM
     if (TIM_GetIntStatus(LPC_TIM2, TIM_MR0_INT))
@@ -406,7 +406,9 @@ void TIMER2_IRQHandler(void)
     }
 }
 
-// --- Interrupción Timer0 (Grabación) ---
+//++++++++++++++++++++++++ Interrupción Timer0 (Grabación) ++++++++++++++++++++++++
+//Cada 20 ms guarda un trío de pulsos [pulso, pulso2, pulso3] en recordedPulses.
+// 1000 muestras
 void TIMER0_IRQHandler(void)
 {
     if (TIM_GetIntStatus(LPC_TIM0, TIM_MR0_INT))
@@ -422,23 +424,19 @@ void TIMER0_IRQHandler(void)
                 recordedPulses[recordIndex][1] = pulso2;
                 recordedPulses[recordIndex][2] = pulso3;
                 recordIndex++;
-            }
-            else
-            {
-                // Grabación completa, pasa a reproducción DMA
-                systemMode = 2;
-                TIM_Cmd(LPC_TIM0, DISABLE); // Detiene Timer0 (grabación)
-                NVIC_DisableIRQ(ADC_IRQn);  // Deshabilita ADC
-                GPDMA_ChannelCmd(0, ENABLE); // Inicia DMA Playback
+
+                if (recordIndex >= NUM_MUESTRAS){
+                    recordIndex = 0;
+                }
             }
         }
     }
 }
 
-// --- Interrupción EINT0 (Cambio de Modo) ---
+//++++++++++++++++++++++++ Interrupción EINT0 (Cambio de Modo) ++++++++++++++++++++++++
 void EINT0_IRQHandler(void)
 {
-    // Simple retardo anti-rebote (no ideal, pero funcional)
+    // Simple retardo anti-rebote
     for (volatile int i = 0; i < 1000000; i++);
 
     EXTI_ClearEXTIFlag(EXTI_EINT0);
@@ -461,7 +459,7 @@ void EINT0_IRQHandler(void)
     else // systemMode == 2: Reproduciendo
     {
         TIM_Cmd(LPC_TIM0, DISABLE);   // Detiene Timer0 (grabación)
-        NVIC_DisableIRQ(ADC_IRQn);  // Deshabilita control por ADC
+        NVIC_DisableIRQ(ADC_IRQn);    // Deshabilita control por ADC
         GPDMA_ChannelCmd(0, ENABLE);  // Inicia DMA
     }
 }
@@ -485,6 +483,6 @@ int main(void)
 
     while (1)
     {
-        // El trabajo se hace en las interrupciones
+
     }
 }
