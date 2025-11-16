@@ -22,14 +22,13 @@
  *******************************************************************************************/
 
 // Mapeo servo
-/*
 static inline uint32_t mapServo(uint16_t val)
 {
     if(val >=1948 && val<2147) return 1500;
     if(val <1948) return 1000 + (uint32_t)(((float)val /1947.0f)*500.0f);
     return 1500 + (uint32_t)(((float)(val-2147)/1948.0f)*500.0f);
 }
-*/
+
 // Variables globales
 volatile uint16_t valorADC1 = 0;
 volatile uint16_t valorADC2 = 0;
@@ -71,7 +70,7 @@ GPDMA_LLI_Type LLI1[BUFFER_SIZE];
 GPDMA_LLI_Type LLI2[BUFFER_SIZE];
 GPDMA_LLI_Type LLI3[BUFFER_SIZE];
 
-//---------------------------------- UART ----------------------------------
+//configuracion uart
 void configGPIO_UART(void) {
     PINSEL_CFG_Type psel_conf;
 
@@ -90,6 +89,7 @@ void configGPIO_UART(void) {
     PINSEL_ConfigPin(&psel_conf);
 }
 
+//configuracion uart
 void configUART(void) {
     UART_CFG_Type uart_cfg;
     UART_FIFO_CFG_Type fifo_cfg;
@@ -104,6 +104,7 @@ void configUART(void) {
 }
 
 // helper corto para enviar strings (opcional pero útil)
+
 static inline void UART_SendText(const char *s)
 {
     UART_Send((LPC_UART_TypeDef *)LPC_UART0, (uint8_t *)s, strlen(s), BLOCKING);
@@ -218,6 +219,9 @@ void ADC_IRQHandler(void)
 }
 
 //---------------------------------- TIMER0 (1 muestra/seg) ----------------------------------
+//Guarda MR1, MR2 y MR3 (posición de los 3 servos).
+//Los guarda en bufferMov[indiceGuardar] cada 1 seg
+
 void ConfTIMER0_Muestreo(void)
 {
     TIM_TIMERCFG_Type c;
@@ -226,8 +230,11 @@ void ConfTIMER0_Muestreo(void)
     TIM_Init(LPC_TIM0, TIM_TIMER_MODE, &c);
 
     TIM_MATCHCFG_Type m;
-    m.MatchChannel=0; m.IntOnMatch=ENABLE; m.ResetOnMatch=ENABLE;
-    m.StopOnMatch=DISABLE; m.MatchValue=1000;
+    m.MatchChannel=0;
+    m.IntOnMatch=ENABLE;
+    m.ResetOnMatch=ENABLE;
+    m.StopOnMatch=DISABLE;
+    m.MatchValue=1000;
 
     TIM_ConfigMatch(LPC_TIM0,&m);
     NVIC_EnableIRQ(TIMER0_IRQn);
@@ -251,6 +258,8 @@ void TIMER0_IRQHandler(void)
 }
 
 //---------------------------------- TIMER2 (PWM 3 servos) ----------------------------------
+//TIMER2 genera el PWM de los 3 servos.
+
 void ConfTIMER2(void)
 {
     TIM_TIMERCFG_Type timerCfg;
@@ -298,6 +307,7 @@ void ConfTIMER2(void)
     TIM_Cmd(LPC_TIM2, ENABLE);
 }
 
+//TIMER2 → genera el PWM de los 3 servos.
 void TIMER2_IRQHandler(void)
 {
     // MATCH0 → reinicia ciclo PWM
@@ -345,6 +355,10 @@ void TIMER2_IRQHandler(void)
 }
 
 //---------------------------------- EINT2 (cambio RECORD/PLAY) ----------------------------------
+//EINT2 = botón que cambia de modo.
+//Si estás en RECORD → pasa a PLAY y arranca el DMA.
+//Si estás en PLAY → vuelve a RECORD, apaga el DMA y muestra si hubo TC o ERROR
+
 void ConfEINT2_Button(void)
 {
     PINSEL_CFG_Type p;
@@ -366,45 +380,38 @@ void ConfEINT2_Button(void)
     NVIC_EnableIRQ(EINT2_IRQn);
 }
 
+//---------------------------------- DMA ----------------------------------
+
 void DMA_Start(void); // forward declare
+
+//1) Si estabas en RECORD → pasa a PLAY
+//2) Si estabas en PLAY → vuelve a RECORD
 
 void EINT2_IRQHandler(void)
 {
     EXTI_ClearEXTIFlag(EXTI_EINT2);
 
-    if (modoOperacion == MODO_RECORD)   //cambia a modo reproduccion
+    if (modoOperacion == MODO_RECORD)   // cambia a reproduccion
     {
         modoOperacion = MODO_PLAY;
         dmaEstado = 0;
         DMA_Start();   // arrancar DMA al entrar en PLAY
         return;
     }
-    else								//cambia a modo grabacion
+    else                                // cambia a grabacion
     {
-        if (dmaEstado == 2) {
-            // Hubo error en la reproducción
-            UART_Send((LPC_UART_TypeDef *)LPC_UART0,
-                      (uint8_t *)"DMA ERROR\r\n",
-                      strlen("DMA ERROR\r\n"),
-                      BLOCKING);
-        } else if (dmaEstado == 1) {
-            // transferencia completa (info opcional)
-            UART_Send((LPC_UART_TypeDef *)LPC_UART0,
-                      (uint8_t *)"DMA TC\r\n",
-                      strlen("DMA TC\r\n"),
-                      BLOCKING);
-        }
-
         modoOperacion = MODO_RECORD;
-        // deshabilitar los 3 canales si están activos
+
+        // deshabilitar los 3 canales DMA
         GPDMA_ChannelCmd(0, DISABLE);
         GPDMA_ChannelCmd(1, DISABLE);
         GPDMA_ChannelCmd(2, DISABLE);
-        dmaEstado = 0;      // limpiar
+
+        dmaEstado = 0; // limpiar
     }
 }
 
-//---------------------------------- DMA + LLI ----------------------------------
+//---------------------------------- DMA + LLI ------------------------------------
 
 void DMA_Start(void)
 {
@@ -473,20 +480,32 @@ void DMA_IRQHandler(void)
 {
     // Revisar errores y completados por canal (0,1,2)
     // Si cualquier canal muestra INTERR -> setear dmaEstado = 2 (error)
-    for (int ch = 0; ch <= 2; ch++)
-    {
-        if (GPDMA_IntGetStatus(GPDMA_STAT_INTERR, ch))
-        {
-            GPDMA_ClearIntPending(GPDMA_STATCLR_INTERR, ch);
-            dmaEstado = 2; // error
-        }
+	 for (int ch = 0; ch <= 2; ch++)
+	    {
+	        // ERROR
+	        if (GPDMA_IntGetStatus(GPDMA_STAT_INTERR, ch))
+	        {
+	            GPDMA_ClearIntPending(GPDMA_STATCLR_INTERR, ch);
+	            dmaEstado = 2;
 
-        if (GPDMA_IntGetStatus(GPDMA_STAT_INTTC, ch))
-        {
-            GPDMA_ClearIntPending(GPDMA_STATCLR_INTTC, ch);
-            dmaEstado = 1; // transferencia completa (al menos un TC)
-        }
-    }
+	            UART_Send((LPC_UART_TypeDef *)LPC_UART0,
+	                      (uint8_t *)"DMA ERROR\r\n",
+	                      strlen("DMA ERROR\r\n"),
+	                      BLOCKING);
+	        }
+
+	        // TRANSFER COMPLETE
+	        if (GPDMA_IntGetStatus(GPDMA_STAT_INTTC, ch))
+	        {
+	            GPDMA_ClearIntPending(GPDMA_STATCLR_INTTC, ch);
+	            dmaEstado = 1;
+
+	            UART_Send((LPC_UART_TypeDef *)LPC_UART0,
+	                      (uint8_t *)"DMA TC\r\n",
+	                      strlen("DMA TC\r\n"),
+	                      BLOCKING);
+	        }
+	}
 }
 
 //---------------------------------- MAIN ----------------------------------
