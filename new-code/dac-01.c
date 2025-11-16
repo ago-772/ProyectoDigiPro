@@ -4,6 +4,10 @@
  * Qué hace:
  *   pulso = 1000–2000 us  → DAC = 0–3.3V proporcional
  *   Se ve una señal analógica suave en el osciloscopio.
+
+Si el pulso es 1000us → DAC ≈ 0V
+Si el pulso es 1500us → DAC ≈ 1.65V
+Si el pulso es 2000us → DAC ≈ 3.3V
  * -------------------------------------------------------------- */
 
 #include "lpc17xx_dac.h"
