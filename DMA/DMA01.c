@@ -40,7 +40,7 @@
 // Buffer para 10 segundos de grabación, muestreando cada 100ms
 #define BUFFER_SAMPLE_MS 100
 #define BUFFER_DURATION_S 10
-#define BUFFER_SIZE ( (BUFFER_DURATION_S * 1000) / BUFFER_SAMPLE_MS ) // 100 muestras
+#define BUFFER_SIZE 100 // 100 muestras
 
 // ---------------------------------------------------------------------------
 // Variables globales
